@@ -270,239 +270,258 @@ static int secp256k1_scalar_cond_negate(secp256k1_scalar *r, int flag) {
 static void secp256k1_scalar_reduce_512(secp256k1_scalar *r, const uint64_t *l) {
 #ifdef USE_ASM_X86_64
     /* Reduce 512 bits into 385. */
-    uint64_t m0, m1, m2, m3, m4, m5, m6;
-    uint64_t p0, p1, p2, p3, p4;
+   
+   /* uint64_t m0, m1, m2, m3, m4, m5, m6;   no need for these*/
+   /* uint64_t p0, p1, p2, p3, p4;        no need for these*/
     uint64_t c;
 
     __asm__ __volatile__(
     /* Preload. */
-    "movq 32(%%rsi), %%r11\n"
-    "movq 40(%%rsi), %%r12\n"
-    "movq 48(%%rsi), %%r13\n"
-    "movq 56(%%rsi), %%r14\n"
+    "movq 32(%%rsi), %%r11\n" 
+    "movq 40(%%rsi), %%r12\n" 
+    "movq 48(%%rsi), %%r13\n" 
+    "movq 56(%%rsi), %%r14\n" 
     /* Initialize r8,r9,r10 */
-    "movq 0(%%rsi), %%r8\n"
-    "xorq %%r9, %%r9\n"
-    "xorq %%r10, %%r10\n"
+    "movq 0(%%rsi), %%rbx\n"  /*rbx instead of r8, so that rbx will be used for direct extraction later on*/
+    "xorq %%r15, %%r15\n" /*will be using r15 instead of r10 so q2 is stored on r15 without ever moving it*/
+    "xorq %%rcx, %%rcx\n"  /*will be using rcx for a while instead of r9 - so that the end result is led to rcx and stays there without ever moving it*/
     /* (r8,r9) += n0 * c0 */
-    "movq %8, %%rax\n"
+    "movq %3, %%rax\n"
     "mulq %%r11\n"
-    "addq %%rax, %%r8\n"
-    "adcq %%rdx, %%r9\n"
+    "addq %%rax, %%rbx\n" /*q0 into rbx*/
+    "adcq %%rdx, %%rcx\n"
     /* extract m0 */
-    "movq %%r8, %q0\n"
-    "xorq %%r8, %%r8\n"
+   /*already extracted to rbx*/
     /* (r9,r10) += l1 */
-    "addq 8(%%rsi), %%r9\n"
-    "adcq $0, %%r10\n"
+    "addq 8(%%rsi), %%rcx\n" 
+    "adcq $0, %%r15\n"
     /* (r9,r10,r8) += n1 * c0 */
-    "movq %8, %%rax\n"
+    "xorq %%r8, %%r8\n"
+    "movq %3, %%rax\n"
     "mulq %%r12\n"
-    "addq %%rax, %%r9\n"
-    "adcq %%rdx, %%r10\n"
+    "addq %%rax, %%rcx\n" /*q1 stored to rcx*/
+    "adcq %%rdx, %%r15\n"
     "adcq $0, %%r8\n"
     /* (r9,r10,r8) += n0 * c1 */
-    "movq %9, %%rax\n"
+    "movq %4, %%rax\n" 
     "mulq %%r11\n"
-    "addq %%rax, %%r9\n"
-    "adcq %%rdx, %%r10\n"
+    "addq %%rax, %%rcx\n"
+    "adcq %%rdx, %%r15\n"
     "adcq $0, %%r8\n"
     /* extract m1 */
-    "movq %%r9, %q1\n"
+    /*already extracted*/
     "xorq %%r9, %%r9\n"
     /* (r10,r8,r9) += l2 */
-    "addq 16(%%rsi), %%r10\n"
+    "addq 16(%%rsi), %%r15\n"
     "adcq $0, %%r8\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += n2 * c0 */
-    "movq %8, %%rax\n"
+    "movq %3, %%rax\n"
     "mulq %%r13\n"
-    "addq %%rax, %%r10\n"
+    "addq %%rax, %%r15\n"
     "adcq %%rdx, %%r8\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += n1 * c1 */
-    "movq %9, %%rax\n"
+    "movq %4, %%rax\n"
     "mulq %%r12\n"
-    "addq %%rax, %%r10\n"
+    "addq %%rax, %%r15\n"
     "adcq %%rdx, %%r8\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += n0 */
-    "addq %%r11, %%r10\n"
+    "addq %%r11, %%r15\n" /*q2 into r15*/
     "adcq $0, %%r8\n"
     "adcq $0, %%r9\n"
     /* extract m2 */
-    "movq %%r10, %q2\n"
-    "xorq %%r10, %%r10\n"
+     "xorq %%r10, %%r10\n" /*r10 use resumed*/
     /* (r8,r9,r10) += l3 */
     "addq 24(%%rsi), %%r8\n"
     "adcq $0, %%r9\n"
     "adcq $0, %%r10\n"
     /* (r8,r9,r10) += n3 * c0 */
-    "movq %8, %%rax\n"
+    "movq %3, %%rax\n"
     "mulq %%r14\n"
     "addq %%rax, %%r8\n"
     "adcq %%rdx, %%r9\n"
     "adcq $0, %%r10\n"
     /* (r8,r9,r10) += n2 * c1 */
-    "movq %9, %%rax\n"
+    "movq %4, %%rax\n"  
     "mulq %%r13\n"
     "addq %%rax, %%r8\n"
     "adcq %%rdx, %%r9\n"
     "adcq $0, %%r10\n"
     /* (r8,r9,r10) += n1 */
-    "addq %%r12, %%r8\n"
+    /*"addq %%r12, %%r8\n"*/
+    "addq %%r8, %%r12\n" /*switched around the order of operands to extract addition result of q3 into r12*/
     "adcq $0, %%r9\n"
     "adcq $0, %%r10\n"
     /* extract m3 */
-    "movq %%r8, %q3\n"
-    "xorq %%r8, %%r8\n"
+
     /* (r9,r10,r8) += n3 * c1 */
-    "movq %9, %%rax\n"
+    "movq %4, %%rax\n" 
+    "xorq %%r8, %%r8\n"
     "mulq %%r14\n"
     "addq %%rax, %%r9\n"
     "adcq %%rdx, %%r10\n"
     "adcq $0, %%r8\n"
     /* (r9,r10,r8) += n2 */
-    "addq %%r13, %%r9\n"
-    "adcq $0, %%r10\n"
-    "adcq $0, %%r8\n"
+    /*"addq %%r13, %%r9\n"*/
+    "addq %%r9, %%r13\n" /*q4 into r13*/
+    "adcq $0, %%r10\n" 
+    "adcq $0, %%r8\n" 
     /* extract m4 */
-    "movq %%r9, %q4\n"
     /* (r10,r8) += n3 */
-    "addq %%r14, %%r10\n"
-    "adcq $0, %%r8\n"
-    /* extract m5 */
-    "movq %%r10, %q5\n"
     /* extract m6 */
-    "movq %%r8, %q6\n"
-    : "=g"(m0), "=g"(m1), "=g"(m2), "=g"(m3), "=g"(m4), "=g"(m5), "=g"(m6)
-    : "S"(l), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)
-    : "rax", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "cc");
+    /* extract m5 */
+    "addq %%r14, %%r10\n" /* q5 into r10 */ 
+    "adcq $0, %%r8\n" /*q6 into r8*/
 
+  
+        /*: "=g"(m0), "=g"(m1), "=g"(m2), "=g"(m3), "=g"(m4), "=g"(m5), "=g"(m6)
+    : "S"(l), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)
+    : "rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "cc"); */
+
+/* %q5 input for second operation is %q0 output from first *now uses RBX as the connecting link*
+    %q6 input for second operation is %q1 output from first  *now uses RCX as the connecting link*
+    %q7 input for second operation is %q2 output from first  *now uses R15 as the connecting link*
+    %q8 input for second operation is %q3 output from first  *now uses R12 as the connecting link*
+    %q9  input for second operation is %q4 output from first  *now uses R13 as the connecting link*
+    %q10 input for second operation is %q5 output from first  *now uses R10 as the connecting link*
+    %q11 input for second operation is %q6 output from first  *now uses R8 as the connecting link */    
+    
     /* Reduce 385 bits into 258. */
-    __asm__ __volatile__(
+    /*__asm__ __volatile__(*/
     /* Preload */
-    "movq %q9, %%r11\n"
-    "movq %q10, %%r12\n"
-    "movq %q11, %%r13\n"
+    /*"movq %q9, %%r11\n"   - deactivated*/
+    /*"movq %q10, %%r12\n" - deactivated*/
+    /*"movq %q11, %%r13\n"  - deactivated*/
     /* Initialize (r8,r9,r10) */
-    "movq %q5, %%r8\n"
-    "xorq %%r9, %%r9\n"
-    "xorq %%r10, %%r10\n"
+    /*"movq %%rbx, %%r8\n" - used to be mov %q5 but then we don't even need that one either, we can work directly with rbx instead of first going through r8*/
+        
+    "xorq %%r14, %%r14\n" /*will be using r14 instead of r9 so that the output goes straight to r14*/
+    "xorq %%r11, %%r11\n"
     /* (r8,r9) += m4 * c0 */
-    "movq %12, %%rax\n"
-    "mulq %%r11\n"
-    "addq %%rax, %%r8\n"
-    "adcq %%rdx, %%r9\n"
+    "movq %3, %%rax\n"
+    "mulq %%r13\n"
+    "addq %%rax, %%rbx\n" /*rbx instead of r8 - since we have moved the prior phase into rbx directly and now do the processing on rbx*/
+    "adcq %%rdx, %%r14\n"
     /* extract p0 */
-    "movq %%r8, %q0\n"
-    "xorq %%r8, %%r8\n"
+    /*"movq %%rbx, %%rbx\n" - won't be needing that - this used to be: "movq %%r8, %q0" - replaced %q0 with rbx which is also the input (%q1) of the next stage operation*/
     /* (r9,r10) += m1 */
-    "addq %q6, %%r9\n"
-    "adcq $0, %%r10\n"
+    "addq %%rcx, %%r14\n" /*instead of addq %q6*/
+    "adcq $0, %%r11\n"
     /* (r9,r10,r8) += m5 * c0 */
-    "movq %12, %%rax\n"
-    "mulq %%r12\n"
-    "addq %%rax, %%r9\n"
-    "adcq %%rdx, %%r10\n"
-    "adcq $0, %%r8\n"
+    "xorq %%rcx, %%rcx\n"  /*rcx repurposed - will now dow what R8 did originally*/
+    "movq %3, %%rax\n"
+    "mulq %%r10\n"
+    "addq %%rax, %%r14\n"
+    "adcq %%rdx, %%r11\n"
+    "adcq $0, %%rcx\n"
     /* (r9,r10,r8) += m4 * c1 */
-    "movq %13, %%rax\n"
-    "mulq %%r11\n"
-    "addq %%rax, %%r9\n"
-    "adcq %%rdx, %%r10\n"
-    "adcq $0, %%r8\n"
+    "movq %4, %%rax\n"
+    "mulq %%r13\n"
+    "addq %%rax, %%r14\n" /*extracted q1 to r14*/
+    "adcq %%rdx, %%r11\n"
+    "adcq $0, %%rcx\n"
     /* extract p1 */
-    "movq %%r9, %q1\n"
     "xorq %%r9, %%r9\n"
     /* (r10,r8,r9) += m2 */
-    "addq %q7, %%r10\n"
-    "adcq $0, %%r8\n"
+    "addq %%r15, %%r11\n" /*r15 instead of q7*/
+    "adcq $0, %%rcx\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += m6 * c0 */
-    "movq %12, %%rax\n"
-    "mulq %%r13\n"
-    "addq %%rax, %%r10\n"
-    "adcq %%rdx, %%r8\n"
+    "movq %3, %%rax\n"
+    "mulq %%r8\n"
+    "addq %%rax, %%r11\n"
+    "adcq %%rdx, %%rcx\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += m5 * c1 */
-    "movq %13, %%rax\n"
-    "mulq %%r12\n"
-    "addq %%rax, %%r10\n"
-    "adcq %%rdx, %%r8\n"
+    "movq %4, %%rax\n"
+    "mulq %%r10\n"
+    "addq %%rax, %%r11\n"
+    "adcq %%rdx, %%rcx\n"
     "adcq $0, %%r9\n"
     /* (r10,r8,r9) += m4 */
-    "addq %%r11, %%r10\n"
-    "adcq $0, %%r8\n"
+    "addq %%r13, %%r11\n"
+    "adcq $0, %%rcx\n"
     "adcq $0, %%r9\n"
     /* extract p2 */
-    "movq %%r10, %q2\n"
+   /*r11 will be used as is without move, in the next stage*/
     /* (r8,r9) += m3 */
-    "addq %q8, %%r8\n"
+
+    "addq %%r12, %%rcx\n" /*r12 = q8 input*/
     "adcq $0, %%r9\n"
     /* (r8,r9) += m6 * c1 */
-    "movq %13, %%rax\n"
-    "mulq %%r13\n"
-    "addq %%rax, %%r8\n"
+    "movq %4, %%rax\n"
+    "mulq %%r8\n"
+    "addq %%rax, %%rcx\n"
     "adcq %%rdx, %%r9\n"
     /* (r8,r9) += m5 */
-    "addq %%r12, %%r8\n"
+    "addq %%r10, %%rcx\n"     /* use rcx directly as q3 output - q4 input for next stage */
     "adcq $0, %%r9\n"
     /* extract p3 */
-    "movq %%r8, %q3\n"
+    /* use r8 directly as q3 output - q4 input for next stage */
     /* (r9) += m6 */
-    "addq %%r13, %%r9\n"
+    "addq %%r8, %%r9\n"
     /* extract p4 */
-    "movq %%r9, %q4\n"
-    : "=&g"(p0), "=&g"(p1), "=&g"(p2), "=g"(p3), "=g"(p4)
-    : "g"(m0), "g"(m1), "g"(m2), "g"(m3), "g"(m4), "g"(m5), "g"(m6), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)
-    : "rax", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "cc");
+    /*use r9 directly instead of extracting to q4 - r9 will carry the %q5 input of the next stage operation*/
+       
+   /*: "=&g"(p0), "=&g"(p1), "=&g"(p2), "=g"(p3), "=g"(p4)*/
+    /*: "g"(m0), "g"(m1), "g"(m2), "g"(m3), "g"(m4), "g"(m5), "g"(m6), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)*/
+    /*: "rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "cc");  */
 
+/* %q1 input for second operation is %q0 output from first *now uses RBX as the connecting link*
+    %q2 input for second operation is %q1 output from first *now uses R14 as the connecting link* 
+    %q3 input for second operation is %q2 output from first *now uses R11 as the connecting link*  
+    %q4 input for second operation is %q3 output from first *now uses RCX as the connecting link* 
+    %q5 input for second operation is %q4 output from first *now uses R9 as the connecting link* */
+    
+    
     /* Reduce 258 bits into 256. */
-    __asm__ __volatile__(
+    /* __asm__ __volatile__( /*
     /* Preload */
-    "movq %q5, %%r10\n"
+    /* r9s are now r13s and r8s are r12s - third stage is heavily altered as the values used in the registers are more conveniently used */
     /* (rax,rdx) = p4 * c0 */
-    "movq %7, %%rax\n"
-    "mulq %%r10\n"
+    "movq %3, %%rax\n"
+    "mulq %%r9\n"   /*use r9 instead of %q5*/
     /* (rax,rdx) += p0 */
-    "addq %q1, %%rax\n"
+    "addq %%rbx, %%rax\n"  /*replaced %q1 with rbx (prior stage output)*/
     "adcq $0, %%rdx\n"
     /* extract r0 */
-    "movq %%rax, 0(%q6)\n"
+    "movq %%rax, 0(%q2)\n" 
     /* Move to (r8,r9) */
-    "movq %%rdx, %%r8\n"
-    "xorq %%r9, %%r9\n"
+    "movq %%rdx, %%r12\n"
+    "xorq %%r13, %%r13\n"
+    "xorq %%r10, %%r10\n"
     /* (r8,r9) += p1 */
-    "addq %q2, %%r8\n"
-    "adcq $0, %%r9\n"
+    "addq %%r14, %%r12\n" /*changed %q2 with %r14  (prior stage output)*/
+    "adcq $0, %%r13\n"
     /* (r8,r9) += p4 * c1 */
-    "movq %8, %%rax\n"
-    "mulq %%r10\n"
-    "addq %%rax, %%r8\n"
-    "adcq %%rdx, %%r9\n"
+    "movq %4, %%rax\n"
+    "mulq %%r9\n"
+    "addq %%rax, %%r12\n"
+    "adcq %%rdx, %%r13\n"
     /* Extract r1 */
-    "movq %%r8, 8(%q6)\n"
-    "xorq %%r8, %%r8\n"
+    "movq %%r12, 8(%q2)\n" 
+    "xorq %%r12, %%r12\n"
     /* (r9,r8) += p4 */
-    "addq %%r10, %%r9\n"
-    "adcq $0, %%r8\n"
+    "addq %%r9, %%r13\n"
+    "adcq $0, %%r12\n"
     /* (r9,r8) += p2 */
-    "addq %q3, %%r9\n"
-    "adcq $0, %%r8\n"
+    "addq %%r11, %%r13\n" /*replaced %q3 with r11 (prior stage output)*/
+    "adcq $0, %%r12\n"
     /* Extract r2 */
-    "movq %%r9, 16(%q6)\n"
-    "xorq %%r9, %%r9\n"
+    "movq %%r13, 16(%q2)\n" 
+    /*"xorq %%r13, %%r13\n"/*
     /* (r8,r9) += p3 */
-    "addq %q4, %%r8\n"
-    "adcq $0, %%r9\n"
-    /* Extract r3 */
-    "movq %%r8, 24(%q6)\n"
+    "addq %%rcx, %%r12\n" /*replaced %q4 with rcx (prior stage output)*/
+    "adcq $0, %%r10\n" /*use r10 which is pre-xored and ready, instead of reusing r13*/
+     /* Extract r3 */
+    "movq %%r12, 24(%q2)\n" 
     /* Extract c */
-    "movq %%r9, %q0\n"
+    "movq %%r10, %q0\n"      
     : "=g"(c)
-    : "g"(p0), "g"(p1), "g"(p2), "g"(p3), "g"(p4), "D"(r), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)
-    : "rax", "rdx", "r8", "r9", "r10", "cc", "memory");
+    : "S"(l), "D"(r), "n"(SECP256K1_N_C_0), "n"(SECP256K1_N_C_1)
+    : "rax", "rbx", "rcx", "rdx", "r8", "r9", "r10", "r11", "r12", "r13", "r14", "r15", "cc", "memory"); 
 #else
     uint128_t c;
     uint64_t c0, c1, c2;
