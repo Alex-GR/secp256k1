@@ -220,11 +220,12 @@ __asm__ __volatile__(
     "adcq %%rdx,%%r9\n"
     /* c += a1 * b1 */
     "movq 8(%%rbx),%%rax\n"
-    "mulq %%r11\n"
+    "mulq %%r11\n"     
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
     /* c += a0 * b2 (last use of %%r10 = a0) */
     "movq 16(%%rbx),%%rax\n"
+    "movq $0xfffffffffffff,%%r11\n"  /*R11 is now free from multiplications and can carry $0xfffffffffffff*/
     "mulq %%r10\n"
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
@@ -238,23 +239,24 @@ __asm__ __volatile__(
     "adcq %%rdx,%%r15\n"
     /* d += a3 * b4 */
     "movq 32(%%rbx),%%rax\n"
+    "movq $0x1000003d10,%%r14\n"  /*R14 is now free from multiplications and can carry $0x1000003d10*/
     "mulq %%r13\n"
     "addq %%rax,%%rcx\n"
     "adcq %%rdx,%%r15\n"
     /* c += (d & M) * R */
     "movq %%rcx,%%rax\n"
-    "movq $0xfffffffffffff,%%rdx\n"
-    "andq %%rdx,%%rax\n"
-    "movq $0x1000003d10,%%rdx\n"
-    "mulq %%rdx\n"
+    /*"movq $0xfffffffffffff,%%rdx\n"*/
+    "andq %%r11,%%rax\n"  /*r11 instead of rdx*/
+    /*"movq $0x1000003d10,%%rdx\n"*/
+    "mulq %%r14\n" /*r14 instead of rdx*/
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
     /* d >>= 52 (%%rcx only) */
     "shrdq $52,%%r15,%%rcx\n"
     /* r[2] = c & M */
     "movq %%r8,%%rax\n"
-    "movq $0xfffffffffffff,%%rdx\n"
-    "andq %%rdx,%%rax\n"
+    /*"movq $0xfffffffffffff,%%rdx\n" */
+    "andq %%r11,%%rax\n" /*r11 instead of rdx*/
     "movq %%rax,16(%%rdi)\n"
     /* c >>= 52 */
     "shrdq $52,%%r9,%%r8\n"
@@ -263,14 +265,14 @@ __asm__ __volatile__(
     "addq %%r10,%%r8\n"
     /* c += d * R */
     "movq %%rcx,%%rax\n"
-    "movq $0x1000003d10,%%rdx\n"
-    "mulq %%rdx\n"
+    /*"movq $0x1000003d10,%%rdx\n"*/
+    "mulq %%r14\n" /*r14 instead of rdx*/
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
     /* r[3] = c & M */
     "movq %%r8,%%rax\n"
-    "movq $0xfffffffffffff,%%rdx\n"
-    "andq %%rdx,%%rax\n"
+    /*"movq $0xfffffffffffff,%%rdx\n"*/
+    "andq %%r11,%%rax\n" /*instead of rdx*/
     "movq %%rax,24(%%rdi)\n"
     /* c >>= 52 (%%r8 only) */
     "shrdq $52,%%r9,%%r8\n"
@@ -302,7 +304,7 @@ __asm__ __volatile__(
     "movq 24(%%rsi),%%r13\n"
     "movq 32(%%rsi),%%r14\n"
     "movq $0xfffffffffffff,%%r15\n"
-
+    
     /* d = (a0*2) * a3 */
     "leaq (%%r10,%%r10,1),%%rax\n"
     "mulq %%r13\n"
@@ -363,13 +365,15 @@ __asm__ __volatile__(
     "shrdq $52,%%rcx,%%rbx\n"
     "xorq %%rcx,%%rcx\n"
     /* tx = t4 >> 48 (tmp3) */
-    "movq %%rsi,%%rax\n"
-    "shrq $48,%%rax\n"
-    "movq %%rax,%q3\n"
+    /* "movq %%rsi,%%rax\n"*/
+    /*"shrq $48,%%rax\n"*/
+    /*"movq %%rax,%q3\n"*/
+    "movq %%rsi,%%r15\n"
+    "shrq $48,%%r15\n" /*stage1 of transfering q3 forward by overwriting r15*/
     /* t4 &= (M >> 4) (tmp2) */
     "movq $0xffffffffffff,%%rax\n"
     "andq %%rax,%%rsi\n"
-    "movq %%rsi,%q2\n"
+    /*"movq %%rsi,%q2\n"   this will be moved forward just after r15 is finished moving q3 - so that r15 can be used to roll q2 forward too*/
     /* c = a0 * a0 */
     "movq %%r10,%%rax\n"
     "mulq %%r10\n"
@@ -385,28 +389,37 @@ __asm__ __volatile__(
     "mulq %%r13\n"
     "addq %%rax,%%rbx\n"
     "adcq %%rdx,%%rcx\n"
+    "movq %%r15,%%rax\n"  /*stage2 of transfering q3 forward using r15 - done*/
+    "movq %%rsi,%%r15\n"  /*stage1 of rolling forward q2*/
+    
     /* u0 = d & M (%%rsi) */
+    
     "movq %%rbx,%%rsi\n"
-    "andq %%r15,%%rsi\n"
-    /* d >>= 52 */
     "shrdq $52,%%rcx,%%rbx\n"
-    "xorq %%rcx,%%rcx\n"
+    "movq $0xfffffffffffff,%%rcx\n" /*using immediate and rcx instead of r15, since r15 is unavailable for use right now*/
+    "andq %%rcx,%%rsi\n"
+    /* d >>= 52 */
+    /*"shrdq $52,%%rcx,%%rbx\n"  moving this upwards for convenience*/
     /* u0 = (u0 << 4) | tx (%%rsi) */
     "shlq $4,%%rsi\n"
-    "movq %q3,%%rax\n"
+    /*"movq %q3,%%rax\n"  Transfered without using the stack*/
     "orq %%rax,%%rsi\n"
     /* c += u0 * (R >> 4) */
     "movq $0x1000003d1,%%rax\n"
     "mulq %%rsi\n"
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
+    "movq %%r15,%%rsi\n"  /*stage2 of moving forward q2 finished*/
+    "movq $0xfffffffffffff,%%r15\n" /*setting r15 back to where it was*/
     /* r[0] = c & M */
     "movq %%r8,%%rax\n"
     "andq %%r15,%%rax\n"
+    "nop\n"
     "movq %%rax,0(%%rdi)\n"
     /* c >>= 52 */
     "shrdq $52,%%r9,%%r8\n"
     "xorq %%r9,%%r9\n"
+    "xorq %%rcx,%%rcx\n"
     /* a0 *= 2 */
     "addq %%r10,%%r10\n"
     /* c += a0 * a1 */
@@ -446,8 +459,9 @@ __asm__ __volatile__(
     "mulq %%r12\n"
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
+    "movq $0x1000003d10,%%r12\n" /*r12 is now free so we'll use it to carry $0x1000003d10*/
     /* fetch t3 (%%r10, overwrites a0),t4 (%%rsi) */
-    "movq %q2,%%rsi\n"
+    /*"movq %q2,%%rsi\n"  will move this upwards so that r15 will roll it forward*/
     "movq %q1,%%r10\n"
     /* c += a1 * a1 */
     "movq %%r11,%%rax\n"
@@ -462,8 +476,8 @@ __asm__ __volatile__(
     /* c += (d & M) * R */
     "movq %%rbx,%%rax\n"
     "andq %%r15,%%rax\n"
-    "movq $0x1000003d10,%%rdx\n"
-    "mulq %%rdx\n"
+    /*"movq $0x1000003d10,%%rdx\n"*/
+    "mulq %%r12\n" /*r12 instead of rdx*/
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
     /* d >>= 52 (%%rbx only) */
@@ -479,8 +493,8 @@ __asm__ __volatile__(
     "addq %%r10,%%r8\n"
     /* c += d * R */
     "movq %%rbx,%%rax\n"
-    "movq $0x1000003d10,%%rdx\n"
-    "mulq %%rdx\n"
+    /*"movq $0x1000003d10,%%rdx\n"*/
+    "mulq %%r12\n" /*r12 instead of rdx*/
     "addq %%rax,%%r8\n"
     "adcq %%rdx,%%r9\n"
     /* r[3] = c & M */
